@@ -1,61 +1,93 @@
-import streamlit as st
 import pandas as pd
 import numpy as np
+import numpy_financial as npf
+import streamlit as st
 
-def calculate_loan_schedule(amount, rate, tenure, is_reducing_rate):
-    if is_reducing_rate:
-        payment_schedule = []
-        for month in range(1, tenure + 1):
-            interest_payment = amount * rate
-            total_payment = amount / (tenure - month + 1) + interest_payment
-            principal_payment = total_payment - interest_payment
-            amount -= principal_payment
 
-            payment_schedule.append([month, total_payment, principal_payment, interest_payment, amount])
-    else:
-        n = tenure
-        P = (amount * rate) / (1 - (1 + rate)**(-n))
-        payment_schedule = []
 
-        for month in range(1, n + 1):
-            interest_payment = amount * rate
-            principal_payment = P - interest_payment
-            amount -= principal_payment
+st.set_page_config(page_title='Loan calculator' ,page_icon="📈" )
 
-            payment_schedule.append([month, P, principal_payment, interest_payment, amount])
 
-    return pd.DataFrame(payment_schedule, columns=['Month', 'Total Payment', 'Principal Payment', 'Interest Payment', 'Outstanding Balance']).round(2)
+st.title('Loan calculator')
 
-def convert_interest_rate(amount, rate, tenure, is_reducing_rate):
-    if is_reducing_rate:
-        reducing_monthly = rate
-        E = amount / tenure
-        flat_monthly = ((amount * rate) + ((amount * rate) / 2)) / amount
-    else:
-        flat_monthly = rate
-        E = amount * rate / (1 - (1 + rate) ** (-tenure))
-        reducing_monthly = (1 - np.power(1 - ((tenure * E) / amount), 1 / tenure)) / (1 - np.power(1 + rate, -tenure))
+loan_amt = st.number_input('Loan Amount',value =500000)
+interet_rate = st.number_input('Interest_rate (monthly)', value= 2)
+tenure = st.slider('Tenure in months', 6, 48, 24)
+int_type = st.radio('Type of interest rate', ['Reducing', 'Flat'])
 
-    return reducing_monthly, flat_monthly
+inte = interet_rate/100
+emi = (loan_amt * inte * pow(1+inte, tenure)) / (pow(1+inte, tenure) - 1)
 
-st.set_page_config(page_title="Loan Calculator", page_icon=":moneybag:", layout="wide")
-st.title("Loan Calculator")
 
-amount = st.number_input("Loan Amount", min_value=1000, max_value=1_000_000, step=1000, value=10000)
-rate = st.number_input("Interest Rate (as a percentage)", min_value=1.0, max_value=30.0, step=0.01, value=6.0)
-tenure = st.number_input("Loan Tenure (in months)", min_value=1, max_value=360, step=1, value=60)
 
-is_reducing_rate = st.radio("Is the interest rate type reducing?", [True, False])
 
-reducing_monthly, flat_monthly = convert_interest_rate(amount, rate / 100, tenure, is_reducing_rate)
 
-interest_rates_table = pd.DataFrame({
-    'Interest Rate Type': ['Reducing Monthly', 'Flat Monthly'],
-    'Rate (%)': [round(reducing_monthly * 100, 2), round(flat_monthly * 100, 2)]
-})
+# rate to be in percentage like ir = 2/100
+# tenure in months
 
-st.table(interest_rates_table)
+def red_to_flat(la, ir, te):
+    flat_rate = ((((npf.pmt(ir,te,-la) * te) - la) /te) / la) 
+    return flat_rate
 
-if st.button("Calculate Loan Schedule"):
-    loan_schedule = calculate_loan_schedule(amount, rate / 100, tenure, is_reducing_rate)
-    st.dataframe(loan_schedule)
+
+def flat_to_red(la, ir, te):
+    red_rate = npf.rate(te, ((la/te) + (la*ir)),-la, fv=0 )
+    return red_rate
+
+
+if int_type == 'Flat':
+    st.write(f'Reducing rate is {round(flat_to_red(loan_amt, inte, tenure)*100,2)}')
+else:
+    st.write(f'Flat rate is {round(red_to_flat(loan_amt, inte, tenure)*100,2   )}')
+
+
+
+if int_type == 'Flat':
+    inte = flat_to_red(loan_amt, inte, tenure)
+else:
+    pass
+
+
+def loan_table(int_type, inte, loan_amt, tenure, emi):
+    loan_table = pd.DataFrame([[0,0,0,0,loan_amt]],
+        columns=[
+        'installment no.',
+        'emi',
+        'principle',
+        'interest',
+        'balance'
+        ]
+    )
+
+    i = 0
+    for i in range(tenure):
+        i_ins = i+1
+        i_emi = emi
+        i_princ = (emi - (loan_table['balance'][i] * inte))
+        i_int = (loan_table['balance'][i] * inte)
+        i_bal = (loan_table['balance'][i]) - i_princ
+
+        loan_table.loc[i+1]= [
+            i_ins,
+            i_emi,
+            i_princ,
+            i_int,
+            i_bal]
+        i = i + 1
+
+
+    for i in loan_table[['emi', 'principle', 'interest', 'balance']]:
+        loan_table[i] = loan_table[i].apply(lambda x: '{:.2f}'.format(x))
+    
+    loan_table['installment no.'] = loan_table['installment no.'].apply(lambda x:int(x))
+    loan_table = loan_table[['emi', 'principle', 'interest', 'balance']]
+
+
+    return loan_table
+
+
+
+
+
+if st.button('calculate'):
+    st.table(loan_table(int_type, inte, loan_amt, tenure, emi))

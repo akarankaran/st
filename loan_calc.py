@@ -10,8 +10,8 @@ st.set_page_config(page_title='Loan calculator' ,page_icon="📈" )
 
 st.title('Loan calculator')
 
-loan_amt = st.number_input('Loan Amount',value =500000)
-interet_rate = st.number_input('Interest_rate (monthly)', value= 2)
+loan_amt = st.number_input('Loan Amount',value =500000, step= 1000)
+interet_rate = st.number_input('Interest_rate (monthly)', value= 2.00)
 tenure = st.slider('Tenure in months', 6, 48, 24)
 int_type = st.radio('Type of interest rate', ['Reducing', 'Flat'])
 
